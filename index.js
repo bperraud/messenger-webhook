@@ -1,45 +1,38 @@
 'use strict';
 
+const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
+// console.log(PAGE_ACCESS_TOKEN);
+
 // Imports dependencies and set up http server
 const
     express    = require('express'),
     bodyParser = require('body-parser'),
+    request    = require('request'),
     app        = express().use(bodyParser.json()); // creates express http server
 
 // Sets server port and logs message on success
 app.listen(process.env.PORT || 1337, () => console.log('webhook is listening'));
 
-// Creates the endpoint for our webhook
+/* Handling all messenges */
 app.post('/webhook', (req, res) => {
-
-    let body = req.body;
-
-    // Checks this is an event from a page subscription
-    if (body.object === 'page') {
-
-        // Iterates over each entry - there may be multiple if batched
-        body.entry.forEach(function (entry) {
-
-            // Gets the message. entry.messaging is an array, but
-            // will only ever contain one message, so we get index 0
-            let webhookEvent = entry.messaging[0];
-            console.log(webhookEvent);
+    console.log(req.body);
+    if (req.body.object === 'page') {
+        req.body.entry.forEach((entry) => {
+            entry.messaging.forEach((event) => {
+                if (event.message && event.message.text) {
+                    sendMessage(event);
+                }
+            });
         });
-
-        // Returns a '200 OK' response to all requests
-        res.status(200).send('EVENT_RECEIVED');
-    } else {
-        // Returns a '404 Not Found' if event is not from a page subscription
-        res.sendStatus(404);
+        res.status(200).end();
     }
-
 });
 
 // Adds support for GET requests to our webhook
 app.get('/webhook', (req, res) => {
 
     // Your verify token. Should be a random string.
-    let VERIFY_TOKEN = "SuperBotNeverEverSeen";
+    const VERIFY_TOKEN = "SuperBotNeverEverSeen";
 
     // Parse the query params
     let mode      = req.query['hub.mode'];
@@ -62,3 +55,24 @@ app.get('/webhook', (req, res) => {
         }
     }
 });
+
+function sendMessage(event) {
+    let sender = event.sender.id;
+    let text   = event.message.text;
+
+    request({
+        url: 'https://graph.facebook.com/v2.6/me/messages',
+        qs: {access_token: PAGE_ACCESS_TOKEN},
+        method: 'POST',
+        json: {
+            recipient: {id: sender},
+            message: {text: text}
+        }
+    }, function (error, response) {
+        if (error) {
+            console.log('Error sending message: ', error);
+        } else if (response.body.error) {
+            console.log('Error: ', response.body.error);
+        }
+    });
+}
